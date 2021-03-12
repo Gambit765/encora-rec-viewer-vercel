@@ -1,0 +1,217 @@
+<%- include('header'); -%>
+    <script>
+    const totalLength = <%= totalLength %>;
+    brotliEnabled = false;
+    gzipEnabled = false;
+    </script>
+    <script src="/api/compression"></script>
+    <script src="/common.js"></script>
+
+    <div id="loadMenu">
+    <div id="downloadMenu">
+    <!--<button type="button" id="load" onclick="downloadRemoteFile()">Download and parse recordings_2020-12-31.csv from server</button>-->
+    <b>Download and parsing recordings_2020-12-31.csv from server</b>
+    <button type="button" onclick="abortDownload()">Click here to abort download</button>
+    </div>
+
+    <div id="localMenu">
+    <label>Load recordings_2020-12-31.csv <input type="file" id="upload" onchange="loadLocalFile()" /></label>
+    </div>
+
+    <div id="downloadProgress"></div>
+    <div id="parseProgress"></div>
+    <div id="loadResult"></div>
+    </div>
+
+    <div id="searchAndResults" style="display:none">
+      <input type='text' id='searchBox' onkeydown='keypress(this)' />
+      <button type='button' id='searchButton' onclick='search()'>Search For Production</button>
+
+      <input type='text' id='performerSearchBox' onkeydown='keypress(this)' />
+      <button type='button' id='performerSearchButton' onclick='searchPerformers()'>Search For Performer</button>
+
+      <br />
+      <br />
+
+      <button type='button' id='showAll' onclick='showResults(true, true)'>Show All</button>
+      <button type='button' id='showVideosOnly' onclick='showResults(true, false)'>Show Videos Only</button>
+      <button type='button' id='showAudiosOnly' onclick='showResults(false, true)'>Show Audios Only</button>
+
+      <br />
+      <br />
+
+      <div id='resultsTitle'></div>
+      <div id="showResults"></div>
+    </div>
+
+    <script>
+        var downloadingRemote = false;
+        var controller = new AbortController();
+        var signal = controller.signal;
+
+        function outputDownloadProgress(current, total) {
+            // console.log(current, total);
+
+            if (!total) {
+                return document.getElementById("downloadProgress").innerHTML = "Downloading";
+            }
+
+            // This totally does not work if x-file-size failed
+            document.getElementById("downloadProgress").innerHTML = "Downloading: " + (100*current/total) + "%";
+        }
+
+        function outputParseProgress(current, total) {
+            // console.log(current, total);
+
+            if (!total)
+                return document.getElementById("parseProgress").innerHTML = "Parsing";
+
+            document.getElementById("parseProgress").innerHTML = "Parsing: " + (100*current/total) + "%";
+        }
+
+        function abortDownload() {
+            controller.abort();
+            document.getElementById("downloadProgress").innerHTML = "Download aborted";
+        }
+
+        function downloadRemoteFile() {
+            document.getElementById("parseProgress").innerHTML = "";
+            document.getElementById("loadResult").innerHTML = "";
+            document.getElementById("downloadProgress").innerHTML = "Starting download";
+
+            downloadingRemote = true;
+            downloadRemoteFileHelper();
+        }
+
+        function downloadRemoteFileHelper() {
+            var dataUrl = "/recordings_2020-12-31.csv";
+
+            if (brotliEnabled) {
+                dataUrl += ".br";
+            } else if (gzipEnabled) {
+                dataUrl += ".gz";
+            }
+
+            outputDownloadProgress(0, totalLength);
+
+            fetch(dataUrl, {signal}).then((response) => {
+              let loaded = 0;
+
+              return new Response(
+                new ReadableStream({
+                  start(controller) {
+                    var reader = response.body.getReader();
+                    read();
+                    function read() {
+                      reader.read().then(({done, value}) => {
+                        if (done) {
+                          return controller.close();
+                        }
+                        loaded += value.byteLength;
+                        outputDownloadProgress(loaded, totalLength);
+                        controller.enqueue(value);
+                        return read();
+                      }).catch(error => {
+                        console.error(error);
+                        controller.error(error);
+                      });
+                    }
+                  }
+                })
+              );
+            })
+            .then(response => response.blob())
+            .then(data => {
+                hideDownloadMenu();
+                startParse(data, totalLength);
+            })
+            .catch(error => {
+                console.error(error);
+            });
+        }
+
+        function loadLocalFile() {
+            var file = document.getElementById("upload").files[0];
+            document.getElementById("parseProgress").innerHTML = 'Parsing';
+            return startParse(file, file.size);
+        }
+
+        function startParse(data, blobLength) {
+            outputParseProgress(0, blobLength);
+
+            Papa.parse(data, {
+                // download: true,
+                header: true,
+                encoding: "UTF-8",
+                complete: parseComplete,
+                skipEmptyLines: true,
+                chunkSize: 1024*1024,
+                chunk: (results, parse) => {
+                    outputParseProgress(results.meta.cursor, blobLength);
+
+                    loadedCSV.data.push(...results.data);
+                },
+                worker: true,
+            });
+        }
+
+        async function parseComplete(DATA_OVERRIDE) {
+            hideDownloadMenu();
+
+            outputParseProgress(1, 1);  // we have to do this to show 100%
+
+            if (downloadingRemote) {
+                document.getElementById("parseProgress").innerHTML += "<br>Fetching sheets data";
+                const sheetsData = await fetchSheetsData();
+                loadedCSV.data.push(...sheetsData);
+            }
+
+            // console.log(DATA_OVERRIDE);
+            if (DATA_OVERRIDE && !loadedCSV.data?.length)
+              loadedCSV.data = DATA_OVERRIDE;
+
+            // build a list of all productions
+            Productions = []
+            var productionsSet = new Set();
+            for (recording of loadedCSV.data) {
+                productionsSet.add(recording.production);
+            }
+            Productions = Array.from(productionsSet).sort();
+
+            document.getElementById("loadResult").innerHTML = 'Loaded ' + loadedCSV.data.length + ' recordings!<br><b>Ready to search.</b><br><span id="autoHide"></span> <a href="#" onclick="hideLoadMenu()">Click to hide now</a>.<hr>';
+
+            document.getElementById("searchAndResults").style.display = '';
+
+            let counter = 20;
+            function autoHideTimer() {
+                if (counter === 0)
+                    return hideLoadMenu();
+
+                var autoHide = document.getElementById("autoHide");
+                if (!autoHide) {
+                    // Already removed :P
+                    return;
+                }
+
+                autoHide.innerText = "This will automatically hide in " + counter + " seconds.";
+                counter--;
+                setTimeout(autoHideTimer, 1000);
+            }
+            autoHideTimer();
+        }
+
+        function hideLoadMenu() {
+            var loadMenu = document.getElementById("loadMenu");
+            loadMenu && loadMenu.remove();
+        }
+
+        function hideDownloadMenu() {
+            var downloadMenu = document.getElementById("downloadMenu")
+            downloadMenu && downloadMenu.remove();
+            var localMenu = document.getElementById("localMenu")
+            localMenu && localMenu.remove();
+        }
+
+        downloadRemoteFile();
+    </script>
+<%- include('footer'); -%>

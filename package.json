@@ -1,0 +1,19 @@
+{
+  "name": "encora-rec-viewer-vercel",
+  "description": "Continuation of encora-rec-viewer for deployment to vercel.com",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "build": "mkdir public; cp -tpublic/ src/static/common.js src/static/recordings_2020-12-31.csv.br && node src/build.js;",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "ejs": "^3.1.6",
+    "spreadsheet-to-json": "^2.0.0"
+  },
+  "devDependencies": {
+    "dotenv": "^8.2.0",
+    "standard": "^16.0.3"
+  }
+}

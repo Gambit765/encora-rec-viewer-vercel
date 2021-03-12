@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+        <title><%= title %></title>
+
+        <style>
+            li a[aria-current="page"] {
+                color: red;
+            }
+            body {
+                max-width: 960px;
+                margin: auto;
+            }
+            button[aria-pressed="true"] {
+                color: red;
+            }
+        </style>
+
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/ejs@3.1.5/ejs.min.js"></script>
+        <script src="/common.js"></script>
+    </head>
+
+    <body>
+        <header>
+            <nav class="menu" aria-label="Primary Navigation">
+                <ul id="nav">
+                    <%_ for(navLink of navLinks) { _%>
+                    <li><a href="<%= navLink.href %>" <%_ if (navLink.current) { _%>
+                            aria-current="page"
+                            <%_ } _%>
+                            ><%= navLink.text _%></a></li>
+                    <%_ } _%>
+                </ul>
+            </nav>
+        </header>
+
+        <main>

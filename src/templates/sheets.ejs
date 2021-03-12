@@ -1,0 +1,56 @@
+<%- include('header'); -%>
+    <h1><%= title %></h1>
+
+    <div id="loading">
+    </div>
+
+    <div id="searchAndResults" style="display:none">
+      <input type='text' id='searchBox' onkeydown='keypress(this)' />
+      <button type='button' id='searchButton' onclick='search()'>Search For Production</button>
+
+      <input type='text' id='performerSearchBox' onkeydown='keypress(this)' />
+      <button type='button' id='performerSearchButton' onclick='searchPerformers()'>Search For Performer</button>
+
+      <br />
+      <br />
+
+      <button type='button' id='showAll' onclick='showResults(true, true)'>Show All</button>
+      <button type='button' id='showVideosOnly' onclick='showResults(true, false)'>Show Videos Only</button>
+      <button type='button' id='showAudiosOnly' onclick='showResults(false, true)'>Show Audios Only</button>
+
+      <br />
+      <br />
+
+      <div id='resultsTitle'></div>
+      <div id="showResults"></div>
+    </div>
+
+    <script>
+        async function parseComplete(DATA_OVERRIDE) {
+            // console.log(DATA_OVERRIDE);
+            if (DATA_OVERRIDE && !loadedCSV.data?.length)
+              loadedCSV.data = DATA_OVERRIDE;
+
+            // build a list of all productions
+            Productions = []
+            var productionsSet = new Set();
+            for (recording of loadedCSV.data) {
+                productionsSet.add(recording.production);
+            }
+            Productions = Array.from(productionsSet).sort();
+
+            document.getElementById("searchAndResults").style.display = '';
+        }
+
+        (async () => {
+            document.getElementById("loading").innerHTML = "Fetching data from Google Sheets";
+            const sheetsData = await fetchSheetsData();
+            if (sheetsData.length) {
+                parseComplete(sheetsData);
+                document.getElementById("loading").remove();
+                return search();
+            }
+            document.getElementById("loading").innerHTML = "Nothing found (maybe someone deleted the spreadsheet?)";
+        })();
+    </script>
+<%- include('footer'); -%>
